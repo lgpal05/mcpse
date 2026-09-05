@@ -1,0 +1,59 @@
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-expenseapprover.git && cd cmcp-expenseapprover
+
+Let’s list the recent commits so we can choose a target revision.
+-----------
+git log --oneline -20
+
+git checkout 28c3df1ccd08d08b14aa52fe4b80f522005341c5
+
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.37.0
+
+syft packages dir:. -o spdx-json > sbom.spdx.json
+
+Governance tools often consume SPDX JSON because the format is machine-readable and stable across scanners.
+---------------
+cat sbom.spdx.json | jq
+
+jq '.packages | length' sbom.spdx.json
+
+Creating the Attestation File
+---------------
+COMMIT_HASH=$(git rev-parse HEAD)
+
+SBOM_SHA256=$(sha256sum "$SBOM_FILE" | awk '{print $1}')
+
+jq -n \
+  --arg c "$COMMIT_HASH" \
+  --arg f "$SBOM_FILE" \
+  --arg h "$SBOM_SHA256" \
+  '{commit: $c, sbom_file: $f, sbom_sha256: $h}' > attestation.json
+
+  cat attestation.json
+
+  Downloading and Installing Cosign
+--------------------------
+cosign generate-key-pair
+
+sigining the attestation
+---------
+cosign sign-blob attestation.json --key cosign.key --output attestation.json.sig
+
+cosign verify-blob attestation.json --signature attestation.json.sig --key cosign.pub
+
+recompute the hash
+0---
+SBOM_SHA256=$(sha256sum sbom.spdx.json | awk '{print $1}')
+echo $SBOM_SHA256
+
+Now’s let’s read the sbom_sha256 inside the attestation JSON file attestation.json.
+
+
+
+You could also write a small if then else statement to compare the SHA-256 of the sbom.spdx.json file with the sbom_sha256 inside the attestation JSON file attestation.json.
+---------
+if [ "$(jq -r '.sbom_sha256' attestation.json)" = "$SBOM_SHA256" ]; then
+  echo "SBOM digest matches attestation."
+else
+  echo "SBOM digest does NOT match attestation!"
+fi
+jq -r '.sbom_sha256' attestation.json
