@@ -1,0 +1,263 @@
+Installing Cosign
+------------
+wget -O /usr/local/bin/cosign https://github.com/sigstore/cosign/releases/download/v2.6.1/cosign-linux-amd64 && chmod +x /usr/local/bin/cosign
+
+cosign version
+
+setting up Git configuration
+--------
+git config --global user.email "root@gitlab-ce-fmx9i8k5.lab.practical-devsecops.training"
+git config --global user.name "root"
+
+Generating the Key Pair
+----------
+cosign generate-key-pair
+
+Loginto git lab
+with root and pdso-training
+
+Create a GitLab Project
+----
+cmcp-expenseapprover
+
+create variables under settings -->cicd
+Variable Key	Variable Value	Type
+COSIGN_PRIVATE_KEY	(paste the full content of cosign.key)	File
+COSIGN_PUBLIC_KEY	(paste the full content of cosign.pub)	File
+COSIGN_PASSWORD	pdso-training	Variable
+
+Cloning the Source Repository
+------------------
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-expenseapprover.git && cd cmcp-expenseapprover
+
+Pointing the Repository to Your GitLab Instance
+----------------
+git remote set-url origin https://gitlab-ce-fmx9i8k5.lab.practical-devsecops.training/root/cmcp-expenseapprover.git
+
+git push origin main
+
+
+
+Creating the Pipeline Configuration File
+------------------
+cat >.gitlab-ci.yml <<'EOF'
+stages:
+  - sbom
+  - attest
+  - sign
+
+generate-sbom:
+  stage: sbom
+  script:
+    - echo "This is the generate-sbom job"
+
+build-attestation:
+  stage: attest
+  script:
+    - echo "This is the build-attestation job"
+
+sign-attestation:
+  stage: sign
+  script:
+    - echo "This is the sign-attestation job"
+EOF
+
+from the terminal
+-----------
+git add .gitlab-ci.yml
+git commit -m "Add pipeline"
+git push origin main
+
+Adding the generate-sbom Job
+------------
+cat >.gitlab-ci.yml <<'EOF'
+stages:
+  - sbom
+  - attest
+  - sign
+
+generate-sbom:
+  stage: sbom
+  image: docker:stable-dind
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.37.0
+  script:
+    - syft scan dir:. --source-name cmcp-expenseapprover --source-version 1.0.0 -o spdx-json=sbom.spdx.json
+  artifacts:
+    paths:
+      - sbom.spdx.json
+    when: always
+
+build-attestation:
+  stage: attest
+  script:
+    - echo "This is the build-attestation job"
+
+sign-attestation:
+  stage: sign
+  script:
+    - echo "This is the sign-attestation job"
+EOF
+
+commit and push
+--------
+git add .gitlab-ci.yml
+git commit -m "Add generate-sbom job to pipeline"
+git push origin main
+
+
+Updating the Pipeline (sign and test)
+-------------------
+cat >.gitlab-ci.yml <<'EOF'
+stages:
+  - sbom
+  - attest
+  - sign
+
+generate-sbom:
+  stage: sbom
+  image: docker:stable-dind
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.37.0
+  script:
+    - syft scan dir:. --source-name cmcp-expenseapprover --source-version 1.0.0 -o spdx-json=sbom.spdx.json
+  artifacts:
+    paths:
+      - sbom.spdx.json
+    when: always
+
+build-attestation:
+  stage: attest
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache jq coreutils git
+  script:
+    - COMMIT_HASH=$(git rev-parse HEAD)
+    - SBOM_FILE="sbom.spdx.json"
+    - SBOM_SHA256=$(sha256sum "$SBOM_FILE" | awk '{print $1}')
+    - "jq -n --arg c \"$COMMIT_HASH\" --arg f \"$SBOM_FILE\" --arg h \"$SBOM_SHA256\" '{commit: $c, sbom_file: $f, sbom_sha256: $h}' > attestation.json"
+    - cat attestation.json
+  artifacts:
+    paths:
+      - attestation.json
+      - sbom.spdx.json
+    when: always
+
+sign-attestation:
+  stage: sign
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache wget
+    - wget -q "https://github.com/sigstore/cosign/releases/download/v2.6.1/cosign-linux-amd64"
+    - mv cosign-linux-amd64 /usr/local/bin/cosign
+    - chmod +x /usr/local/bin/cosign
+  script:
+    - cp "$COSIGN_PRIVATE_KEY" cosign.key
+    - cosign sign-blob attestation.json --key cosign.key --output-signature attestation.json.sig --tlog-upload=false --yes
+  variables:
+    COSIGN_PASSWORD: "$COSIGN_PASSWORD"
+  artifacts:
+    paths:
+      - attestation.json
+      - attestation.json.sig
+      - sbom.spdx.json
+    when: always
+EOF
+
+-->Check the code into repo
+git add .gitlab-ci.yml
+git commit -m "Add build-attestation and sign-attestation jobs"
+git push origin main
+
+Verifying the Pipeline Attestation
+--------------------
+cat >.gitlab-ci.yml <<'EOF'
+stages:
+  - sbom
+  - attest
+  - sign
+  - verify
+
+generate-sbom:
+  stage: sbom
+  image: docker:stable-dind
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.37.0
+  script:
+    - syft scan dir:. --source-name cmcp-expenseapprover --source-version 1.0.0 -o spdx-json=sbom.spdx.json
+  artifacts:
+    paths:
+      - sbom.spdx.json
+    when: always
+
+build-attestation:
+  stage: attest
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache jq coreutils git
+  script:
+    - COMMIT_HASH=$(git rev-parse HEAD)
+    - SBOM_FILE="sbom.spdx.json"
+    - SBOM_SHA256=$(sha256sum "$SBOM_FILE" | awk '{print $1}')
+    - "jq -n --arg c \"$COMMIT_HASH\" --arg f \"$SBOM_FILE\" --arg h \"$SBOM_SHA256\" '{commit: $c, sbom_file: $f, sbom_sha256: $h}' > attestation.json"
+    - cat attestation.json
+  artifacts:
+    paths:
+      - attestation.json
+      - sbom.spdx.json
+    when: always
+
+sign-attestation:
+  stage: sign
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache wget
+    - wget -q "https://github.com/sigstore/cosign/releases/download/v2.6.1/cosign-linux-amd64"
+    - mv cosign-linux-amd64 /usr/local/bin/cosign
+    - chmod +x /usr/local/bin/cosign
+  script:
+    - cp "$COSIGN_PRIVATE_KEY" cosign.key
+    - cosign sign-blob attestation.json --key cosign.key --output-signature attestation.json.sig --tlog-upload=false --yes
+  variables:
+    COSIGN_PASSWORD: "$COSIGN_PASSWORD"
+  artifacts:
+    paths:
+      - attestation.json
+      - attestation.json.sig
+      - sbom.spdx.json
+    when: always
+
+verify-attestation:
+  stage: verify
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache wget jq coreutils
+    - wget -q "https://github.com/sigstore/cosign/releases/download/v2.6.1/cosign-linux-amd64"
+    - mv cosign-linux-amd64 /usr/local/bin/cosign
+    - chmod +x /usr/local/bin/cosign
+  script:
+    - cp "$COSIGN_PUBLIC_KEY" cosign.pub
+    - cosign verify-blob attestation.json --signature attestation.json.sig --key cosign.pub --insecure-ignore-tlog
+    - SBOM_SHA256=$(sha256sum sbom.spdx.json | awk '{print $1}')
+    - ATTESTED_SHA256=$(jq -r '.sbom_sha256' attestation.json)
+    - |
+      if [ "$SBOM_SHA256" = "$ATTESTED_SHA256" ]; then
+        echo "SBOM digest matches attestation."
+      else
+        echo "SBOM digest does NOT match attestation!"
+        exit 1
+      fi
+  dependencies:
+    - sign-attestation
+EOF
+
+check the code
+---------
+git add .gitlab-ci.yml
+git commit -m "Add verify-attestation job to pipeline"
+git push origin main
+
+
