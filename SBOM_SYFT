@@ -1,0 +1,33 @@
+Let’s install syft in our DevSecOps Box.
+--------------------
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.37.0
+
+syft --help
+
+Collecting SBOMs for a Python MCP Server
+-----------------------
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-expenseapprover
+
+cd cmcp-expenseapprover
+
+syft scan
+------------
+syft scan dir:./
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+
+rescan
+-------
+syft scan dir:./
+
+syft scan dir:./ | more
+
+cat requirements.txt | wc -l
+
+syft scan dir:./ -o json > cmcp-expenseapprover-sbom.json
+
+jq '.artifacts | length' cmcp-expenseapprover-sbom.json
+
