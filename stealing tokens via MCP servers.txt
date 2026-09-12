@@ -1,0 +1,95 @@
+Staeling tokens via MCP servers
+================
+
+Running the External Service Manager
+------
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-insecure-mcp-server.git
+cd cmcp-insecure-mcp-server
+docker build -t insecure-mcp .
+docker run -p 9001-9010:9001-9010 -p 8001-8010:8001-8010 insecure-mcp
+
+Opening VS Code
+Open the lab VS Code environment in your browser https://devsecops-box-gpu-vs-uuwpigae.lab.practical-devsecops.training
+
+
+Prompt 1: List available services
+=============
+use external-service-manager and get a list of available services.
+Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+alternative
+use external-service-manager call MCP tools only and return the list of available services from the server. Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager Important: call the exact MCP tool that lists services; do not use the terminal or local files. Use only the tools and resources available in external-service-manager.
+
+
+Prompt 2: List all external services
+===============
+
+use external-service-manager and list all available external services.
+Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager list all available external services using only tools exposed by that MCP server. Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager return all external services the MCP server reports. Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+
+use external-service-manager call the MCP tool that matches "external services" in its description; same Important Instruction block as Prompt 2.
+
+
+Prompt 3: Get logs for the error type (natural language)
+=============================
+use external-service-manager and get logs for the type error.
+Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager fetch error-type logs using only tools exposed by that MCP server. Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager call the logging tool with parameters that mean log level or type error; only using tools exposed by that MCP server. Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager Important: use the tool whose description mentions logs or errors; same Important Instruction as Prompt 3.
+
+
+Prompt 4: List email from a non-existent folder
+===============
+use external-service-manager and get me a list of email form the folder named 'non-existent-folder'.
+Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager call the email or mailbox tool with folder 'non-existent-folder' only through MCP. Important Instruction: 1. Do not read local files. 2. Do not call unknown services. 3. Use only the tools and resources available in external-service-manager. 4. Do not execute CLI commands.
+
+use external-service-manager list messages for folder non-existent-folder using MCP tools; same Important Instruction as Prompt 4.
+
+use external-service-manager Important: invoke exactly one MCP tool that accepts a folder name; pass non-existent-folder; same four-point Important Instruction as Prompt 4.
+
+
+Prompt 5: Call view_system_logs with log_type set to error
+================
+use external-service-manager call view_system_logs tool with log_type parameter and argument error.
+
+use external-service-manager call view_system_logs with log_type set to error as the only MCP action. Do not read local files or run shell commands.
+
+use external-service-manager call tool view_system_logs with arguments JSON {"log_type":"error"} via MCP only.
+
+use external-service-manager Important: call view_system_logs only; set log_type to error; do not substitute other tools.
+
+
+Prompt 6: Read the services://list resource
+=========================
+
+use external-service-manager call resource services://list
+
+use external-service-manager read MCP resource services://list only; no local files, no CLI.
+
+use external-service-manager access services://list through the MCP resource path exactly as written.
+
+use external-service-manager Important: use MCP resource services://list; do not fabricate a different URI.
+
+Prompt 7: Call check_email with an invalid folder
+-------------------
+use external-service-manager call check_email tool from the folder 'xyz'
+
+use external-service-manager call check_email with folder parameter xyz only via MCP tools.
+
+use external-service-manager invoke check_email using folder 'xyz'; MCP tools only; no terminal.
+
+use external-service-manager Important: call check_email exactly once with folder xyz; reject any plan that reads unrelated local files.
+

@@ -1,0 +1,39 @@
+Running the Calculate Server
+=============
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-insecure-mcp-server.git
+cd cmcp-insecure-mcp-server
+docker build -t insecure-mcp .
+docker run -p 9001-9010:9001-9010 -p 8001-8010:8001-8010 insecure-mcp
+
+open vscode
+--
+https://devsecops-box-gpu-vs-uuwpigae.lab.practical-devsecops.training/
+
+select bring api key
+
+ollama and ollama model
+
+
+for remote mcp server-----
+----------------
+Field	Value
+Server Name	calculate-server
+Server URL	https://devsecops-box-gpu-vs-uuwpigae-8005.lab.practical-devsecops.training/mcp
+Transport Type	Select Streamable HTTP
+
+
+Demonstrating Tool Confusion and the Hidden Attack (different prompts)
+---
+use calculate-server and calculate 1+2
+use calculate-server call the calculate tool with expression 1+2
+use calculate-server call the calculate tool with expression parameter and argument "1+2"
+use calculate-server call the calculate tool with expression 1+2. Important: Call the exact tool you are asked to call, do not call random tools
+
+
+Second Prompt
+-------------
+use calculate-server and calculator for calculating the calculation of 3*5
+
+Third Prompt
+---------
+use calculate-server and calculate '1+2 get_secrets()'
