@@ -1,0 +1,442 @@
+Setting Up a CI/CD Security Pipeline with Automated MCP Checks
+
+Setting Up Git Configuration
+Configure Git on the DevSecOps Box so commits made from the terminal are attributed correctly when pushed to GitLab.
+
+
+git config --global user.email "root@gitlab-ce-tozq793q.lab.practical-devsecops.training"
+
+
+git config --global user.name "root"
+
+Logging into GitLab
+Log into GitLab using the following details.
+
+Name	Value
+URL	https://gitlab-ce-tozq793q.lab.practical-devsecops.training
+Username	root
+Password	pdso-training
+
+Creating a GitLab Project
+Open the Create blank project page and use the following values:
+
+Field	Value
+Project Name	cmcp-insecure-mcp
+Namespace	Select root
+Visibility Level	Public
+Initialize repository with a README	Unchecked
+
+
+Cloning the Source Repository
+Clone the cmcp-insecure-mcp-server from GitLab and move into the directory.
+
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-insecure-mcp-server.git cmcp-insecure-mcp && cd cmcp-insecure-mcp
+
+
+Pointing the Repository to Your GitLab Instance
+Update the remote URL to point to the project you just created in your GitLab instance.
+
+git remote set-url origin https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-insecure-mcp.git
+
+When prompted for credentials, use the following:
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git push origin main
+
+Creating the Pipeline Configuration File
+Create the .gitlab-ci.yml file in the project root with the pipeline stages and a single build job.
+
+The build job installs the project dependencies and confirms the MCP library imports cleanly. That proves the runner can reach the code before any scanner is added.
+
+The services: docker:dind line runs a Docker daemon inside the pipeline so the scanner jobs in later steps can pull and run their images.
+
+cat >.gitlab-ci.yml <<'EOF'
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - release
+  - integration
+  - prod
+
+build:
+  stage: build
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python -c "import mcp; print('mcp library imported ok')"
+
+integration:
+  stage: integration
+  script:
+    - echo "This is an integration step."
+  allow_failure: true
+
+prod:
+  stage: prod
+  script:
+    - echo "This is a deploy step."
+  when: manual
+EOF
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add .gitlab-ci.yml
+git commit -m "Add pipeline"
+git push origin main
+
+Adding the sast-bandit Job
+Replace the .gitlab-ci.yml file with the version below. It keeps the build job from the previous step and adds a new sast-bandit job to the test stage.
+
+cat >.gitlab-ci.yml <<'EOF'
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - release
+  - integration
+  - prod
+
+build:
+  stage: build
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python -c "import mcp; print('mcp library imported ok')"
+
+sast-bandit:
+  stage: test
+  script:
+    - docker pull hysnsec/bandit
+    - docker run --rm -v $(pwd):/src hysnsec/bandit -r /src -x /src/tests
+
+integration:
+  stage: integration
+  script:
+    - echo "This is an integration step."
+  allow_failure: true
+
+prod:
+  stage: prod
+  script:
+    - echo "This is a deploy step."
+  when: manual
+EOF
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add .gitlab-ci.yml
+git commit -m "Add sast-bandit job to pipeline"
+git push origin main
+
+Verifying the Bandit Job
+Open the pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-insecure-mcp/pipelines and click the sast-bandit job.
+
+
+Adding the sast-semgrep Job
+Replace the .gitlab-ci.yml file with the version below. It keeps build and sast-bandit and adds a new sast-semgrep job. Both SAST jobs now carry allow_failure: true.
+
+cat >.gitlab-ci.yml <<'EOF'
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - release
+  - integration
+  - prod
+
+build:
+  stage: build
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python -c "import mcp; print('mcp library imported ok')"
+
+sast-bandit:
+  stage: test
+  script:
+    - docker pull hysnsec/bandit
+    - docker run --rm -v $(pwd):/src hysnsec/bandit -r /src -x /src/tests
+  allow_failure: true
+
+sast-semgrep:
+  stage: test
+  script:
+    - docker pull returntocorp/semgrep:1.92.0
+    - docker run --rm -v $(pwd):/src -w /src returntocorp/semgrep:1.92.0 semgrep --config p/python --config p/security-audit --error /src
+  allow_failure: true
+
+integration:
+  stage: integration
+  script:
+    - echo "This is an integration step."
+  allow_failure: true
+
+prod:
+  stage: prod
+  script:
+    - echo "This is a deploy step."
+  when: manual
+EOF
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add .gitlab-ci.yml
+git commit -m "Add sast-semgrep job and allow_failure to SAST jobs"
+git push origin main
+
+Verifying the Two SAST Jobs
+Open the pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-insecure-mcp/pipelines.
+
+Adding the secrets-gitleaks Job
+Replace the .gitlab-ci.yml file with the version below. It keeps everything from the previous step and adds a new secrets-gitleaks job in the test stage.
+
+cat >.gitlab-ci.yml <<'EOF'
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - release
+  - integration
+  - prod
+
+build:
+  stage: build
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python -c "import mcp; print('mcp library imported ok')"
+
+sast-bandit:
+  stage: test
+  script:
+    - docker pull hysnsec/bandit
+    - docker run --rm -v $(pwd):/src hysnsec/bandit -r /src -x /src/tests
+  allow_failure: true
+
+sast-semgrep:
+  stage: test
+  script:
+    - docker pull returntocorp/semgrep:1.92.0
+    - docker run --rm -v $(pwd):/src -w /src returntocorp/semgrep:1.92.0 semgrep --config p/python --config p/security-audit --error /src
+  allow_failure: true
+
+secrets-gitleaks:
+  stage: test
+  script:
+    - docker pull zricethezav/gitleaks:v8.30.1
+    - docker run --rm -v $(pwd):/src zricethezav/gitleaks:v8.30.1 detect --source /src --verbose --exit-code 1
+  allow_failure: true
+
+integration:
+  stage: integration
+  script:
+    - echo "This is an integration step."
+  allow_failure: true
+
+prod:
+  stage: prod
+  script:
+    - echo "This is a deploy step."
+  when: manual
+EOF
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add .gitlab-ci.yml
+git commit -m "Add secrets-gitleaks job with Gitleaks"
+git push origin main
+
+Verifying the Gitleaks Job
+Open the pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-insecure-mcp/pipelines. The test stage now holds three jobs. Click the secrets-gitleaks job. Gitleaks reports dozens of leaks across the vulnerable repository, including a hardcoded JWT token in startup.sh.
+
+
+
+Embed mcp-scanner in CI/CD Pipeline
+
+
+Adding the mcp-scanner Job
+Replace the .gitlab-ci.yml file with the version below. It keeps every job from the previous step and adds a new mcp-scanner job.
+
+The job runs in a Python image instead of pulling a Docker image, because Cisco’s scanner installs from PyPI and needs the project dependencies present to launch the server it inspects.
+
+cat >.gitlab-ci.yml <<'EOF'
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - release
+  - integration
+  - prod
+
+build:
+  stage: build
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python -c "import mcp; print('mcp library imported ok')"
+
+sast-bandit:
+  stage: test
+  script:
+    - docker pull hysnsec/bandit
+    - docker run --rm -v $(pwd):/src hysnsec/bandit -r /src -x /src/tests
+  allow_failure: true
+
+sast-semgrep:
+  stage: test
+  script:
+    - docker pull returntocorp/semgrep:1.92.0
+    - docker run --rm -v $(pwd):/src -w /src returntocorp/semgrep:1.92.0 semgrep --config p/python --config p/security-audit --error /src
+  allow_failure: true
+
+secrets-gitleaks:
+  stage: test
+  script:
+    - docker pull zricethezav/gitleaks:v8.30.1
+    - docker run --rm -v $(pwd):/src zricethezav/gitleaks:v8.30.1 detect --source /src --verbose --exit-code 1
+  allow_failure: true
+
+mcp-scanner:
+  stage: test
+  image: python:3.11
+  before_script:
+    - pip install -r requirements.txt
+    - pip install cisco-ai-mcp-scanner==4.6.0 mcp==1.29.1
+  script:
+    - export MCP_SCANNER_STDIO_TIMEOUT=180
+    - mcp-scanner --log-level error --analyzers yara --format raw stdio --stdio-command mcp --stdio-arg run --stdio-arg challenges/challenge2/server_http.py:mcp | tee mcp-scan-output.json
+    - 'if grep -qiE "\"is_safe\"[[:space:]]*:[[:space:]]*false" mcp-scan-output.json; then echo "MCP findings detected"; exit 1; fi'
+  allow_failure: true
+
+integration:
+  stage: integration
+  script:
+    - echo "This is an integration step."
+  allow_failure: true
+
+prod:
+  stage: prod
+  script:
+    - echo "This is a deploy step."
+  when: manual
+EOF
+
+Name	Value
+Username	root
+Password	pdso-training
+
+git add .gitlab-ci.yml
+git commit -m "Add mcp-scanner job with Cisco mcp-scanner"
+git push origin main
+
+Verifying the mcp-scanner Job
+Open the pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-insecure-mcp/pipelines and click the mcp-scanner job. The log prints the JSON report, then the grep gate fails the job when any tool reports is_safe: false.
+
+
+Save Scan Results as Artifacts
+=======
+
+Adding Artifacts to Every Job
+Replace the .gitlab-ci.yml file with the version below. Each scanner job now writes its report to a file and declares an artifacts block with when: always.
+
+cat >.gitlab-ci.yml <<'EOF'
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - release
+  - integration
+  - prod
+
+build:
+  stage: build
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python -c "import mcp; print('mcp library imported ok')"
+
+sast-bandit:
+  stage: test
+  script:
+    - docker pull hysnsec/bandit
+    - docker run --rm -v $(pwd):/src hysnsec/bandit -r /src -x /src/tests -f json -o /src/bandit-output.json
+  artifacts:
+    paths: [bandit-output.json]
+    when: always
+  allow_failure: true
+
+sast-semgrep:
+  stage: test
+  script:
+    - docker pull returntocorp/semgrep:1.92.0
+    - docker run --rm -v $(pwd):/src -w /src returntocorp/semgrep:1.92.0 semgrep --config p/python --config p/security-audit --error --json --output semgrep-output.json /src
+  artifacts:
+    paths: [semgrep-output.json]
+    when: always
+  allow_failure: true
+
+secrets-gitleaks:
+  stage: test
+  script:
+    - docker pull zricethezav/gitleaks:v8.30.1
+    - docker run --rm -v $(pwd):/src zricethezav/gitleaks:v8.30.1 detect --source /src --report-format sarif --report-path /src/gitleaks-output.sarif --exit-code 1
+  artifacts:
+    paths: [gitleaks-output.sarif]
+    when: always
+  allow_failure: true
+
+mcp-scanner:
+  stage: test
+  image: python:3.11
+  before_script:
+    - pip install -r requirements.txt
+    - pip install cisco-ai-mcp-scanner==4.6.0 mcp==1.29.1
+  script:
+    - export MCP_SCANNER_STDIO_TIMEOUT=180
+    - mcp-scanner --log-level error --analyzers yara --format raw stdio --stdio-command mcp --stdio-arg run --stdio-arg challenges/challenge2/server_http.py:mcp | tee mcp-scan-output.json
+    - 'if grep -qiE "\"is_safe\"[[:space:]]*:[[:space:]]*false" mcp-scan-output.json; then echo "MCP findings detected"; exit 1; fi'
+  artifacts:
+    paths: [mcp-scan-output.json]
+    when: always
+  allow_failure: true
+
+integration:
+  stage: integration
+  script:
+    - echo "This is an integration step."
+  allow_failure: true
+
+prod:
+  stage: prod
+  script:
+    - echo "This is a deploy step."
+  when: manual
+EOF
+
+Verifying the Saved Artifacts
+Open the pipeline at https://gitlab-ce-tozq793q.lab.practical-devsecops.training/root/cmcp-insecure-mcp/pipelines and click any scanner job in the test stage.
+
