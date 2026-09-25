@@ -1,0 +1,144 @@
+Setting Up the Lab
+In this step, we will start the vulnerable Calculate Server, open the VS Code environment, configure the Cline AI agent, and connect it to the server.
+
+Running the Calculate Server
+The Calculate Server is part of the cmcp-insecure-mcp-server collection, a set of intentionally vulnerable MCP servers built to demonstrate real-world attack patterns.
+
+
+git clone https://gitlab.practical-devsecops.training/marudhamaran/cmcp-insecure-mcp-server.git
+cd cmcp-insecure-mcp-server
+python3 -m venv .venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+cd challenges/challenge5
+python3 server_http.py
+
+Opening VS Code
+Open the lab VS Code environment in your browser https://devsecops-box-gpu-vs-tozq793q.lab.practical-devsecops.training
+
+Setting Up Cline
+Cline is an AI coding agent that runs directly inside VS Code. It can connect to MCP servers, call tools, and act autonomously on your behalf. Cline is already installed in your VS Code environment.
+
+You might have seen LibreChat used in this course before. While LibreChat is primarily used as a chat system, Cline is used as a coding agent and is far more capable when it comes to tool use.
+
+Click the Cline icon (the robot head) in the left activity bar of VS Code.
+
+Field	Value
+Server Name	calculate-server
+Server URL	https://devsecops-box-gpu-vs-tozq793q-8005.lab.practical-devsecops.training/mcp
+Transport Type	Select Streamable HTTP
+
+
+reproduce
+----
+use calculate-server and calculate 1+2
+
+use calculate-server and calculator for calculating the calculation of 3*5
+
+use calculate-server and calculate '1+2 get_secrets()'
+
+use calculate-server call the calculate tool with expression '1+2 get_secrets()'
+use calculate-server call the calculate tool with expression parameter and argument "1+2 get_secrets()"
+
+Installing Cisco MCP Scanner
+=
+uv tool install --python 3.13 cisco-ai-mcp-scanner==4.6.0 --with 'mcp==1.29.1'
+
+mcp-scanner -h
+
+Running the Scan
+=============
+export MCP_SCANNER_LLM_API_KEY=pdso-training
+export MCP_SCANNER_LLM_ENDPOINT=http://localhost:11434
+
+mcp-scanner --server-url http://127.0.0.1:8005/mcp --analyzers yara --format summary
+
+mcp-scanner --server-url http://127.0.0.1:8005/mcp --analyzers yara --format detailed
+
+mcp-scanner --analyzers yara resources --server-url http://127.0.0.1:8005/mcp
+
+
+mcp-scanner --analyzers yara --detailed resources --server-url http://127.0.0.1:8005/mcp
+
+
+Running a Custom Metadata Check
+===============
+cat > check_mcp_metadata.py << 'EOF'
+import httpx, json, sys
+
+HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+
+def parse_response(resp):
+    ct = resp.headers.get("content-type", "")
+    text = resp.text.strip()
+    if "text/event-stream" in ct or text.startswith("data:"):
+        for line in text.splitlines():
+            if line.startswith("data:"):
+                try:
+                    return json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+        return {}
+    try:
+        return resp.json()
+    except Exception:
+        return {}
+
+def mcp_call(client, url, method, params, req_id=None, session_id=None):
+    headers = dict(HEADERS)
+    if session_id:
+        headers["Mcp-Session-Id"] = session_id
+    body = {"jsonrpc": "2.0", "method": method, "params": params}
+    if req_id is not None:
+        body["id"] = req_id
+    return client.post(url, headers=headers, json=body, timeout=10)
+
+def check(server_url):
+    with httpx.Client() as client:
+        resp = mcp_call(client, server_url, "initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "metadata-check", "version": "1.0"}
+        }, req_id=1)
+        session_id = resp.headers.get("Mcp-Session-Id")
+
+        mcp_call(client, server_url, "notifications/initialized", {}, session_id=session_id)
+
+        resp = mcp_call(client, server_url, "tools/list", {}, req_id=2, session_id=session_id)
+        data = parse_response(resp)
+        tools = data.get("result", {}).get("tools", [])
+
+        names = [t["name"] for t in tools]
+        descs = [t.get("description", "") for t in tools]
+
+        print(f"Tools found: {names}\n")
+
+        markers = ["IMPORTANT", "must access", "do not mention", "include them in your response"]
+        for t in tools:
+            name, desc = t["name"], t.get("description", "")
+            for m in markers:
+                if m.lower() in desc.lower():
+                    print(f"[INJECTION MARKER] Tool '{name}': found '{m}' in description")
+
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                if names[i] in names[j] or names[j] in names[i]:
+                    print(f"[SIMILAR NAMES] '{names[i]}' and '{names[j]}' are too similar")
+                if descs[i] and descs[i] == descs[j]:
+                    print(f"[DUPLICATE DESC] '{names[i]}' and '{names[j]}' share the same description")
+
+if __name__ == "__main__":
+    check(sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8005/mcp")
+EOF
+
+
+python3 check_mcp_metadata.py http://127.0.0.1:8005/mcp
+
+
+cd ~/cmcp-insecure-mcp-server/challenges/challenge5
+
+cat server_http.py
+
